@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31624.102
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameServer", "Server\GameServer.csproj", "{798FC183-DC86-424A-94DC-4581D1D0A349}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ServerCore", "ServerCore\ServerCore.csproj", "{8AAB87CE-2472-4ABE-BDA6-7C31B13999C8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClientBot", "ClientBot\ClientBot.csproj", "{4696A5F5-80A3-418D-81E0-972A1ED1CF5E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{798FC183-DC86-424A-94DC-4581D1D0A349}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{798FC183-DC86-424A-94DC-4581D1D0A349}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{798FC183-DC86-424A-94DC-4581D1D0A349}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{798FC183-DC86-424A-94DC-4581D1D0A349}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8AAB87CE-2472-4ABE-BDA6-7C31B13999C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8AAB87CE-2472-4ABE-BDA6-7C31B13999C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8AAB87CE-2472-4ABE-BDA6-7C31B13999C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8AAB87CE-2472-4ABE-BDA6-7C31B13999C8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4696A5F5-80A3-418D-81E0-972A1ED1CF5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4696A5F5-80A3-418D-81E0-972A1ED1CF5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4696A5F5-80A3-418D-81E0-972A1ED1CF5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4696A5F5-80A3-418D-81E0-972A1ED1CF5E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E8E8B14F-6A8B-49C5-8015-FE9B8756676A}
+	EndGlobalSection
+EndGlobal
