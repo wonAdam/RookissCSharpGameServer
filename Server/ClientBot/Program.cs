@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 
 using ServerCore;
+using ServerCore.Packets;
 
 namespace ClientBot
 {
@@ -34,7 +35,7 @@ namespace ClientBot
                     RQ_TestMsg msg = new RQ_TestMsg();
                     msg.msg = "Hello From Client ! ! !";
                     Send(msg);
-                    Thread.Sleep(100);
+                    Thread.Sleep(5000);
                 }
             }
             catch (Exception e)
@@ -56,7 +57,11 @@ namespace ClientBot
         public override void OnRecv(Packet packet)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine($"[From Server] {packet.ToString()}");
+
+            if(packet.PacketId == RS_TestMsg.Id)
+                Console.WriteLine($"[From Server] {((RS_TestMsg)packet).msg}");
+            else
+                Console.WriteLine($"[From Server] {packet.ToString()}");
         }
 
         public override void OnSend(int numOfBtyes)

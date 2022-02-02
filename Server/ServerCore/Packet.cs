@@ -7,6 +7,8 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Text;
 using System.Threading.Tasks;
 
+using ServerCore.Packets;
+
 namespace ServerCore
 {
     public class PacketHeader
@@ -33,7 +35,7 @@ namespace ServerCore
 
         public ArraySegment<byte> Serialize()
         {
-            ArraySegment<byte> buffer = new ArraySegment<byte>(new byte[2 ^ 10]);
+            ArraySegment<byte> buffer = new ArraySegment<byte>(new byte[Size]);
             int bufferCursor = 0;
             {
                 byte[] member = BitConverter.GetBytes(_packetSize);
@@ -101,32 +103,32 @@ namespace ServerCore
 
             // TODO: packetId에 따라 Packet객체 생성후 Deserialize
             // 자동 생성 코드가 필요
-            ArraySegment<byte> ContentBuffer = new ArraySegment<byte>(packetBuffer.Array, packetBuffer.Offset + readCursor, packetSize);
 
+            ArraySegment<byte> contentBuffer = packetBuffer.Slice(packetBuffer.Offset + readCursor, packetSize);
             switch (packetId)
             {
                 case RQ_Ping.Id:
                 {
                     packet = new RQ_Ping();
-                    packet.Deserialize(ContentBuffer);
+                    packet.Deserialize(contentBuffer);
                     break;
                 }
                 case RS_Ping.Id:
                 {
                     packet = new RS_Ping();
-                    packet.Deserialize(ContentBuffer);
+                    packet.Deserialize(contentBuffer);
                     break;
                 }
                 case RQ_TestMsg.Id:
                 {
                     packet = new RQ_TestMsg();
-                    packet.Deserialize(ContentBuffer);
+                    packet.Deserialize(contentBuffer);
                     break;
                 }
                 case RS_TestMsg.Id:
                 {
                     packet = new RS_TestMsg();
-                    packet.Deserialize(ContentBuffer);
+                    packet.Deserialize(contentBuffer);
                     break;
                 }
                 default:

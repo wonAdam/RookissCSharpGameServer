@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading;
 
 using ServerCore;
+using ServerCore.Packets;
 
 namespace Server
 {
@@ -32,11 +33,14 @@ namespace Server
         public override void OnRecv(Packet packet)
         {
             Console.ForegroundColor = ConsoleColor.Cyan;
-            Console.WriteLine($"[From Client] {packet.ToString()}");
+            if (packet.PacketId == RQ_TestMsg.Id)
+                Console.WriteLine($"[From Server] {((RQ_TestMsg)packet).msg}");
+            else
+                Console.WriteLine($"[From Server] {packet.ToString()}");
 
-            //RS_TestMsg msg = new RS_TestMsg();
-            //msg.msg = "Hello From Server ! ! !";
-            //Send(msg);
+            RS_TestMsg msg = new RS_TestMsg();
+            msg.msg = "Hello From Server ! ! !";
+            Send(msg);
         }
 
         public override void OnSend(int numOfBtyes)

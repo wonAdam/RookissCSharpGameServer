@@ -21,7 +21,7 @@ namespace ServerCore
     {
         Socket _socket;
 
-        RecvBuffer _recvBuffer = new RecvBuffer(2^16);
+        RecvBuffer _recvBuffer = new RecvBuffer(65536);
         SendBuffer _sendBuffer = new SendBuffer(SendBufferHelper.ChunkSize);
 
         Queue<Packet> _sendQueue = new Queue<Packet>();
@@ -41,10 +41,10 @@ namespace ServerCore
         public void Start(Socket socket)
         {
             _socket = socket;
-            _sendArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnRecv_Internal);
-            _recvArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnRecv_Internal);
+            _sendArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnSend_Internal);
+            //_recvArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnRecv_Internal);
 
-            RegisterRecv(_recvArgs);
+            RegisterRecv();
         }
 
         public void Disconnect()
@@ -73,10 +73,12 @@ namespace ServerCore
         {
             _sendAsync = true;
             int packetSizeSum = 0;
+            List<ArraySegment<byte>> buffs = new List<ArraySegment<byte>>();
             while (_sendQueue.Count > 0)
             {
                 Packet packet = _sendQueue.Dequeue();
                 ArraySegment<byte> buff = PacketConverter.Serialize(packet);
+                buffs.Add(buff);
 #if DEBUG
                 Console.ForegroundColor = ConsoleColor.Yellow;
                 Console.WriteLine($"[Send]: {packet.ToString()}");
@@ -85,6 +87,12 @@ namespace ServerCore
             }
 
             ArraySegment<byte> sendBuffer = SendBufferHelper.Open(packetSizeSum);
+            int cursor = 0;
+            foreach(ArraySegment<byte> buff in buffs)
+            {
+                Array.Copy(buff.Array, 0, sendBuffer.Array, sendBuffer.Offset + cursor, buff.Count);
+                cursor += buff.Count;
+            }
             _sendArgs.SetBuffer(sendBuffer.Array, sendBuffer.Offset, sendBuffer.Count);
             SendBufferHelper.Close(packetSizeSum);
 
@@ -93,8 +101,16 @@ namespace ServerCore
                 OnSend_Internal(null, _sendArgs);
         }
 
+
         void OnSend_Internal(object sender, SocketAsyncEventArgs args)
         {
+            if (!(args.BytesTransferred > 0 && args.SocketError == SocketError.Success))
+            {
+                Disconnect();
+                return;
+            }
+
+
             if (args.SocketError != SocketError.Success)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
@@ -124,38 +140,33 @@ namespace ServerCore
             }
         }
 
-        void RegisterRecv(SocketAsyncEventArgs args)
+        void RegisterRecv()
         {
             _recvBuffer.Clean();
             ArraySegment<byte> segement = _recvBuffer.WriteSegment;
             _recvArgs.SetBuffer(segement.Array, segement.Offset, segement.Count);
-            
-            bool pending = _socket.ReceiveAsync(args);
-            if (!pending)
-            {
-                OnRecv_Internal(null, args);
-            }
+
+            _socket.BeginReceive(segement.Array, segement.Offset, segement.Count, SocketFlags.None, new AsyncCallback(OnRecvAsync), null);
+            //bool pending = _socket.ReceiveAsync(args);
+            //if (!pending)
+            //{
+            //    OnRecv_Internal(null, args);
+            //}
         }
 
-        void OnRecv_Internal(object sender, SocketAsyncEventArgs args)
+        void OnRecvAsync(IAsyncResult ar)
         {
-            if(args.SocketError != SocketError.Success)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"[Socket Error] {args.SocketError.ToString()}");
-                Disconnect();
-                return;
-            }
-
-            if (args.BytesTransferred <= 0)
-            {
-                RegisterRecv(args);
-                return;
-            }
-
             try
             {
-                while(true)
+                int receivedSize = _socket.EndReceive(ar);
+
+                if (receivedSize == 0)
+                {
+                    RegisterRecv();
+                    return;
+                }
+
+                while (true)
                 {
                     Packet packet;
                     ArraySegment<byte> readSegment = _recvBuffer.ReadSegment;
@@ -164,7 +175,7 @@ namespace ServerCore
                     {
                         case EServerError.None:
                         {
-                            if (!_recvBuffer.OnWrite(args.BytesTransferred))
+                            if (!_recvBuffer.OnWrite(receivedSize))
                             {
                                 Disconnect();
                                 return;
@@ -172,36 +183,36 @@ namespace ServerCore
 
                             OnRecv(packet);
 
-                            if (!_recvBuffer.OnRead(args.BytesTransferred))
+                            if (!_recvBuffer.OnRead(receivedSize))
                             {
                                 Disconnect();
                                 throw new Exception($"Recv Buffer Error");
                             }
 
-                            RegisterRecv(args);
+                            RegisterRecv();
                             break;
                         }
                         case EServerError.PacketFragmentation:
                         {
-                            if (!_recvBuffer.OnWrite(args.BytesTransferred))
+                            if (!_recvBuffer.OnWrite(receivedSize))
                             {
                                 Disconnect();
                                 return;
                             }
 
-                            RegisterRecv(args);
+                            RegisterRecv();
                             return;
                         }
                         case EServerError.UndefinedPacket:
                         default:
                         {
-                            if (!_recvBuffer.CancelWrite(args.BytesTransferred))
+                            if (!_recvBuffer.CancelWrite(receivedSize))
                             {
                                 Disconnect();
                                 return;
                             }
 
-                            RegisterRecv(args);
+                            RegisterRecv();
                             throw new Exception($"Undefined ServerError {error.ToString()}");
                         }
                     }
@@ -210,10 +221,95 @@ namespace ServerCore
             }
             catch (Exception e)
             {
+                RegisterRecv();
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"[Exception] {e.Message}");
             }
         }
+
+        //void OnRecv_Internal(object sender, SocketAsyncEventArgs args)
+        //{
+        //    if (!(args.BytesTransferred > 0 && args.SocketError == SocketError.Success))
+        //    {
+        //        Disconnect();
+        //        return;
+        //    }
+
+        //    if (args.SocketError != SocketError.Success)
+        //    {
+        //        Console.ForegroundColor = ConsoleColor.Red;
+        //        Console.WriteLine($"[Socket Error] {args.SocketError.ToString()}");
+        //        Disconnect();
+        //        return;
+        //    }
+
+        //    if (args.BytesTransferred <= 0)
+        //    {
+        //        RegisterRecv();
+        //        return;
+        //    }
+
+        //    try
+        //    {
+        //        while(true)
+        //        {
+        //            Packet packet;
+        //            ArraySegment<byte> readSegment = _recvBuffer.ReadSegment;
+        //            EServerError error = PacketConverter.Deserialize(new ArraySegment<byte>(readSegment.Array, readSegment.Offset, readSegment.Count), out packet);
+        //            switch (error)
+        //            {
+        //                case EServerError.None:
+        //                {
+        //                    if (!_recvBuffer.OnWrite(args.BytesTransferred))
+        //                    {
+        //                        Disconnect();
+        //                        return;
+        //                    }
+
+        //                    OnRecv(packet);
+
+        //                    if (!_recvBuffer.OnRead(args.BytesTransferred))
+        //                    {
+        //                        Disconnect();
+        //                        throw new Exception($"Recv Buffer Error");
+        //                    }
+
+        //                    RegisterRecv();
+        //                    break;
+        //                }
+        //                case EServerError.PacketFragmentation:
+        //                {
+        //                    if (!_recvBuffer.OnWrite(args.BytesTransferred))
+        //                    {
+        //                        Disconnect();
+        //                        return;
+        //                    }
+
+        //                    RegisterRecv();
+        //                    return;
+        //                }
+        //                case EServerError.UndefinedPacket:
+        //                default:
+        //                {
+        //                    if (!_recvBuffer.CancelWrite(args.BytesTransferred))
+        //                    {
+        //                        Disconnect();
+        //                        return;
+        //                    }
+
+        //                    RegisterRecv();
+        //                    throw new Exception($"Undefined ServerError {error.ToString()}");
+        //                }
+        //            }
+        //        }
+
+        //    }
+        //    catch (Exception e)
+        //    {
+        //        Console.ForegroundColor = ConsoleColor.Red;
+        //        Console.WriteLine($"[Exception] {e.Message}");
+        //    }
+        //}
 
     }
 }
