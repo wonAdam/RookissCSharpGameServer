@@ -13,25 +13,35 @@ namespace Server
     {
         public override void OnConnected(EndPoint endPoint)
         {
-            Console.WriteLine($"[Server] OnConnected: {endPoint.ToString()}");
+            Console.ForegroundColor = ConsoleColor.Green;
+            if(endPoint != null)
+                Console.WriteLine($"[Server] OnConnected: {endPoint.ToString()}");
+            else
+                Console.WriteLine($"[Server] OnConnected");
         }
 
         public override void OnDisconnected(EndPoint endPoint)
         {
-            Console.WriteLine($"[Server] OnDisconnected: {endPoint.ToString()}");
+            Console.ForegroundColor = ConsoleColor.Green;
+            if(endPoint != null)
+                Console.WriteLine($"[Server] OnDisconnected: {endPoint.ToString()}");
+            else
+                Console.WriteLine($"[Server] OnDisconnected");
         }
 
-        public override void OnRecv(ArraySegment<byte> buffer)
+        public override void OnRecv(Packet packet)
         {
-            string msg = Encoding.UTF8.GetString(buffer.Array, buffer.Offset, buffer.Count);
-            Console.WriteLine($"[From Client] {msg}");
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"[From Client] {packet.ToString()}");
 
-            byte[] sendMsg = Encoding.UTF8.GetBytes("Hello From Server !");
-            Send(sendMsg);
+            //RS_TestMsg msg = new RS_TestMsg();
+            //msg.msg = "Hello From Server ! ! !";
+            //Send(msg);
         }
 
         public override void OnSend(int numOfBtyes)
         {
+            Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine($"[Server] Transferred bytes: {numOfBtyes}");
         }
     }
@@ -39,19 +49,9 @@ namespace Server
     class Program
     {
         static Listener _listener = new Listener();
-        static int listenPortNum = 7777;
-
-        static IPEndPoint GetIPEndPoint()
-        {
-            string host = Dns.GetHostName();
-            IPHostEntry ipHost = Dns.GetHostEntry(host);
-            IPAddress ipAddr = ipHost.AddressList[0];
-            return new IPEndPoint(ipAddr, listenPortNum);
-        }
-
         static void Main(string[] args)
         {
-            _listener.Init(GetIPEndPoint(), () => { return new GameSession(); });
+            _listener.Init(() => { return new GameSession(); });
 
             while (true)
             {

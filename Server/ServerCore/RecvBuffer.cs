@@ -43,12 +43,19 @@ namespace ServerCore
             }
         }
 
+        public bool CancelWrite(int numOfBytes)
+        {
+            if (_writePos - numOfBytes < _readPos || _writePos - numOfBytes < 0)
+                return false; 
+
+            _writePos -= numOfBytes;
+            return true;
+        }
+
         public bool OnRead(int numOfBytes)
         {
             if (numOfBytes > DataSize)
-            {
                 return false;
-            }
 
             _readPos += numOfBytes;
             return true;
@@ -57,9 +64,8 @@ namespace ServerCore
         public bool OnWrite(int numOfBytes)
         {
             if (numOfBytes > FreeSize)
-            {
                 return false;
-            }
+
             _writePos += numOfBytes;
             return true;
         }

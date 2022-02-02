@@ -11,11 +11,23 @@ namespace ServerCore
     {
         Socket _listenSocket;
         Func<Session> _sessionFactory;
-        public void Init(IPEndPoint endPoint, Func<Session> sessionFactory)
+
+        public static int serverPortNum = 4040;
+        public static IPEndPoint GetServerIPEndPoint()
         {
+            string host = Dns.GetHostName();
+            IPHostEntry ipHost = Dns.GetHostEntry(host);
+            IPAddress ipAddr = ipHost.AddressList[0];
+            return new IPEndPoint(ipAddr, serverPortNum);
+        }
+        public void Init(Func<Session> sessionFactory)
+        {
+            IPEndPoint endPoint = GetServerIPEndPoint();
             _listenSocket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
             _listenSocket.Bind(endPoint);
             _listenSocket.Listen(10);
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine($"Listening on {endPoint.Address.ToString()} : {endPoint.Port}");
 
             _sessionFactory = sessionFactory;
 
@@ -51,8 +63,10 @@ namespace ServerCore
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e.Message);
-                }                
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"[Exception] {e.Message}");
+                }
+                
             }
             else
             {

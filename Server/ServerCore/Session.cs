@@ -9,12 +9,11 @@ using System.Threading.Tasks;
 
 namespace ServerCore
 {
-    enum ESocketError
+    public enum EServerError
     { 
         None,
-        BytesTransferedZero,
-        SocketErrorNotSuccess,
-        BufferNull,
+        UndefinedPacket,
+        PacketFragmentation,
     }
 
 
@@ -23,10 +22,11 @@ namespace ServerCore
         Socket _socket;
 
         RecvBuffer _recvBuffer = new RecvBuffer(2^16);
+        SendBuffer _sendBuffer = new SendBuffer(SendBufferHelper.ChunkSize);
 
-        Queue<byte[]> _sendQueue = new Queue<byte[]>();
+        Queue<Packet> _sendQueue = new Queue<Packet>();
         object _sendLock = new object();
-        List<ArraySegment<byte>> _sendBufferList = new List<ArraySegment<byte>>();
+        bool _sendAsync = false;
 
         SocketAsyncEventArgs _sendArgs = new SocketAsyncEventArgs();
         SocketAsyncEventArgs _recvArgs = new SocketAsyncEventArgs();
@@ -34,18 +34,15 @@ namespace ServerCore
         int _disconnected = 0;
 
         public abstract void OnConnected(EndPoint endPoint);
-        public abstract void OnRecv(ArraySegment<byte> buffer);
+        public abstract void OnRecv(Packet packet);
         public abstract void OnSend(int numOfBtyes);
         public abstract void OnDisconnected(EndPoint endPoint);
 
         public void Start(Socket socket)
         {
-            _sendArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnRecv_Internal);
             _socket = socket;
-            
+            _sendArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnRecv_Internal);
             _recvArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnRecv_Internal);
-            ArraySegment<byte> segement = _recvBuffer.WriteSegment;
-            _recvArgs.SetBuffer(segement.Array, segement.Offset, segement.Count);
 
             RegisterRecv(_recvArgs);
         }
@@ -61,28 +58,35 @@ namespace ServerCore
             _socket.Close();
         }
 
-        public void Send(byte[] sendBuff)
+        public void Send(Packet packet)
         {
-            lock(_sendLock)
+            lock (_sendLock)
             {
-                _sendQueue.Enqueue(sendBuff);
+                _sendQueue.Enqueue(packet);
 
-                if (_sendBufferList.Count == 0)
+                if (!_sendAsync)
                     RegisterSend();
             }
         }
 
         void RegisterSend()
         {
-            _sendBufferList.Clear();
+            _sendAsync = true;
+            int packetSizeSum = 0;
             while (_sendQueue.Count > 0)
             {
-                byte[] buff = _sendQueue.Dequeue();
-                _sendBufferList.Add(new ArraySegment<byte>(buff, 0, buff.Length));
+                Packet packet = _sendQueue.Dequeue();
+                ArraySegment<byte> buff = PacketConverter.Serialize(packet);
+#if DEBUG
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"[Send]: {packet.ToString()}");
+#endif
+                packetSizeSum += buff.Count;
             }
 
-            _sendArgs.SetBuffer(null);
-            _sendArgs.BufferList = _sendBufferList;
+            ArraySegment<byte> sendBuffer = SendBufferHelper.Open(packetSizeSum);
+            _sendArgs.SetBuffer(sendBuffer.Array, sendBuffer.Offset, sendBuffer.Count);
+            SendBufferHelper.Close(packetSizeSum);
 
             bool pending = _socket.SendAsync(_sendArgs);
             if (!pending)
@@ -91,28 +95,31 @@ namespace ServerCore
 
         void OnSend_Internal(object sender, SocketAsyncEventArgs args)
         {
-            lock(_sendLock)
+            if (args.SocketError != SocketError.Success)
             {
-                ESocketError error = CheckSendError(args);
-                if (error == ESocketError.None)
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[Socket Error] {args.SocketError.ToString()}");
+                Disconnect();
+                return;
+            }
+
+            if (args.BytesTransferred <= 0)
+                return;
+
+            lock (_sendLock)
+            {
+                try
                 {
-                    try
-                    {
-                        _sendBufferList.Clear();
+                    _sendAsync = false;
+                    OnSend(args.BytesTransferred);
 
-                        OnSend(args.BytesTransferred);
-
-                        if (_sendQueue.Count > 0)
-                            RegisterSend();
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e.Message);
-                    }
+                    if (_sendQueue.Count > 0)
+                        RegisterSend();
                 }
-                else
+                catch (Exception e)
                 {
-                    Disconnect();
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"[Exception] {e.Message}");
                 }
             }
         }
@@ -120,55 +127,93 @@ namespace ServerCore
         void RegisterRecv(SocketAsyncEventArgs args)
         {
             _recvBuffer.Clean();
-
+            ArraySegment<byte> segement = _recvBuffer.WriteSegment;
+            _recvArgs.SetBuffer(segement.Array, segement.Offset, segement.Count);
+            
             bool pending = _socket.ReceiveAsync(args);
-            if(!pending)
+            if (!pending)
+            {
                 OnRecv_Internal(null, args);
+            }
         }
 
         void OnRecv_Internal(object sender, SocketAsyncEventArgs args)
         {
-            ESocketError error = CheckRecvError(args);
-            if (error == ESocketError.None)
-            {
-                // TODO
-                try
-                {
-                    OnRecv(new ArraySegment<byte>(args.Buffer, args.Offset, args.BytesTransferred));
-                    RegisterRecv(args);
-                }
-                catch (Exception e)
-                {
-                    Console.WriteLine(e.Message);
-                }
-
-            }
-            else
-            {
-                //TODO
-            }
-        }
-
-        ESocketError CheckRecvError(SocketAsyncEventArgs args)
-        {
-            if(args.BytesTransferred <= 0)
-                return ESocketError.BytesTransferedZero;
             if(args.SocketError != SocketError.Success)
-                return ESocketError.SocketErrorNotSuccess;
-            if (args.Buffer == null)
-                return ESocketError.BufferNull;
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[Socket Error] {args.SocketError.ToString()}");
+                Disconnect();
+                return;
+            }
 
-            return ESocketError.None;
-        }
-
-        ESocketError CheckSendError(SocketAsyncEventArgs args)
-        {
             if (args.BytesTransferred <= 0)
-                return ESocketError.BytesTransferedZero;
-            if (args.SocketError != SocketError.Success)
-                return ESocketError.SocketErrorNotSuccess;
+            {
+                RegisterRecv(args);
+                return;
+            }
 
-            return ESocketError.None;
+            try
+            {
+                while(true)
+                {
+                    Packet packet;
+                    ArraySegment<byte> readSegment = _recvBuffer.ReadSegment;
+                    EServerError error = PacketConverter.Deserialize(new ArraySegment<byte>(readSegment.Array, readSegment.Offset, readSegment.Count), out packet);
+                    switch (error)
+                    {
+                        case EServerError.None:
+                        {
+                            if (!_recvBuffer.OnWrite(args.BytesTransferred))
+                            {
+                                Disconnect();
+                                return;
+                            }
+
+                            OnRecv(packet);
+
+                            if (!_recvBuffer.OnRead(args.BytesTransferred))
+                            {
+                                Disconnect();
+                                throw new Exception($"Recv Buffer Error");
+                            }
+
+                            RegisterRecv(args);
+                            break;
+                        }
+                        case EServerError.PacketFragmentation:
+                        {
+                            if (!_recvBuffer.OnWrite(args.BytesTransferred))
+                            {
+                                Disconnect();
+                                return;
+                            }
+
+                            RegisterRecv(args);
+                            return;
+                        }
+                        case EServerError.UndefinedPacket:
+                        default:
+                        {
+                            if (!_recvBuffer.CancelWrite(args.BytesTransferred))
+                            {
+                                Disconnect();
+                                return;
+                            }
+
+                            RegisterRecv(args);
+                            throw new Exception($"Undefined ServerError {error.ToString()}");
+                        }
+                    }
+                }
+
+            }
+            catch (Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[Exception] {e.Message}");
+            }
         }
+
     }
 }

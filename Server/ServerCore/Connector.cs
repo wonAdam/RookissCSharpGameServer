@@ -10,15 +10,16 @@ namespace ServerCore
     {
         private Func<Session> _sessionFactory;
         public abstract void OnConnect(IPEndPoint endPoint);
-        public void Connect(IPEndPoint endPoint, Func<Session> sessionFactory, int count = 1)
+
+        public void Connect(Func<Session> sessionFactory, int count = 1)
         {
             _sessionFactory = sessionFactory;
             for (int i = 0; i < count; i++)
             {
-                Socket socket = new Socket(endPoint.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+                Socket socket = new Socket(Listener.GetServerIPEndPoint().AddressFamily, SocketType.Stream, ProtocolType.Tcp);
                 SocketAsyncEventArgs args = new SocketAsyncEventArgs();
                 args.Completed += OnConnect_Internal;
-                args.RemoteEndPoint = endPoint;
+                args.RemoteEndPoint = Listener.GetServerIPEndPoint();
                 args.UserToken = socket;
 
                 RegisterConnect(args);
@@ -38,13 +39,16 @@ namespace ServerCore
         {
             if (args.SocketError == SocketError.Success)
             {
+                Console.ForegroundColor = ConsoleColor.Green;
+                Console.WriteLine($"[Client] Connected");
                 Session session = _sessionFactory.Invoke();
                 session.Start(args.ConnectSocket);
                 session.OnConnected(args.RemoteEndPoint);
             }
             else
             {
-                Console.WriteLine($"");
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[Connection Fail]: {args.SocketError.ToString()}");
             }
         }
     }

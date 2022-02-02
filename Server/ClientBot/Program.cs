@@ -12,6 +12,7 @@ namespace ClientBot
     {
         public override void OnConnect(IPEndPoint endPoint)
         {
+            Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine($"OnConnected: {endPoint.ToString()}");
         }
     }
@@ -20,55 +21,58 @@ namespace ClientBot
     {
         public override void OnConnected(EndPoint endPoint)
         {
-            Console.WriteLine($"[Client] OnConnected: {endPoint.ToString()}");
+            Console.ForegroundColor = ConsoleColor.Green;
+            if(endPoint != null)
+                Console.WriteLine($"[Client] OnConnected: {endPoint.ToString()}");
+            else
+                Console.WriteLine($"[Client] OnConnected");
+
             try
             {
                 while (true)
                 {
-                    byte[] msgByte = Encoding.UTF8.GetBytes("Hello World !");
-                    Send(msgByte);
-                    Thread.Sleep(500);
+                    RQ_TestMsg msg = new RQ_TestMsg();
+                    msg.msg = "Hello From Client ! ! !";
+                    Send(msg);
+                    Thread.Sleep(100);
                 }
             }
             catch (Exception e)
             {
+                Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine(e.Message);
             }
         }
 
         public override void OnDisconnected(EndPoint endPoint)
         {
-            Console.WriteLine($"[Client] OnDisconnected: {endPoint.ToString()}");
+            Console.ForegroundColor = ConsoleColor.Green;
+            if(endPoint != null)
+                Console.WriteLine($"[Client] OnDisconnected: {endPoint.ToString()}");
+            else
+                Console.WriteLine($"[Client] OnDisconnected");
         }
 
-        public override void OnRecv(ArraySegment<byte> buffer)
+        public override void OnRecv(Packet packet)
         {
-            string recvMsg = Encoding.UTF8.GetString(buffer.Array, buffer.Offset, buffer.Count);
-            Console.WriteLine($"[From Server] {recvMsg}");
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"[From Server] {packet.ToString()}");
         }
 
         public override void OnSend(int numOfBtyes)
         {
+            Console.ForegroundColor = ConsoleColor.Cyan;
             Console.WriteLine($"[Client] Transferred bytes: {numOfBtyes}");
         }
     }
 
     class Program
     {
-        static int portNum = 7777;
         static ClientBotConnector _connector = new ClientBotConnector();
-        static IPEndPoint GetIPEndPoint()
-        {
-            string host = Dns.GetHostName();
-            IPHostEntry ipHost = Dns.GetHostEntry(host);
-            IPAddress ipAddr = ipHost.AddressList[0];
-            return new IPEndPoint(ipAddr, portNum);
-        }
 
         static void Main(string[] args)
         {
-            IPEndPoint endPoint = GetIPEndPoint();
-            _connector.Connect(endPoint, () =>
+            _connector.Connect(() =>
             {
                 return new ClientSession();
             });
