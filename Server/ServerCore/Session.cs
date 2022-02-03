@@ -41,8 +41,6 @@ namespace ServerCore
         public void Start(Socket socket)
         {
             _socket = socket;
-            _sendArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnSend_Internal);
-            //_recvArgs.Completed += new EventHandler<SocketAsyncEventArgs>(OnRecv_Internal);
 
             RegisterRecv();
         }
@@ -93,12 +91,49 @@ namespace ServerCore
                 Array.Copy(buff.Array, 0, sendBuffer.Array, sendBuffer.Offset + cursor, buff.Count);
                 cursor += buff.Count;
             }
-            _sendArgs.SetBuffer(sendBuffer.Array, sendBuffer.Offset, sendBuffer.Count);
             SendBufferHelper.Close(packetSizeSum);
 
-            bool pending = _socket.SendAsync(_sendArgs);
-            if (!pending)
-                OnSend_Internal(null, _sendArgs);
+            SocketError sockError;
+            _socket.BeginSend(sendBuffer.Array, sendBuffer.Offset, sendBuffer.Count, SocketFlags.None, out sockError, new AsyncCallback(SendCallback), null);
+
+            if(sockError != SocketError.Success)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"BeginSend Error: {sockError.ToString()}");
+                Disconnect();
+                return;
+            }
+        }
+
+        void SendCallback(IAsyncResult ar)
+        {
+            try
+            {
+                int sendSize = _socket.EndSend(ar);
+
+                if(sendSize == 0)
+                {
+                    Disconnect();
+                    return;
+                }
+
+                lock (_sendLock)
+                {
+                    _sendAsync = false;
+                    OnSend(sendSize);
+
+                    if (_sendQueue.Count > 0)
+                        RegisterSend();
+                }
+            }
+            catch (Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[Exception] {e.Message}");
+
+                if (_sendQueue.Count > 0)
+                    RegisterSend();
+            }
         }
 
 
@@ -146,7 +181,7 @@ namespace ServerCore
             ArraySegment<byte> segement = _recvBuffer.WriteSegment;
             _recvArgs.SetBuffer(segement.Array, segement.Offset, segement.Count);
 
-            _socket.BeginReceive(segement.Array, segement.Offset, segement.Count, SocketFlags.None, new AsyncCallback(OnRecvAsync), null);
+            _socket.BeginReceive(segement.Array, segement.Offset, segement.Count, SocketFlags.None, new AsyncCallback(RecvCallback), null);
             //bool pending = _socket.ReceiveAsync(args);
             //if (!pending)
             //{
@@ -154,7 +189,7 @@ namespace ServerCore
             //}
         }
 
-        void OnRecvAsync(IAsyncResult ar)
+        void RecvCallback(IAsyncResult ar)
         {
             try
             {
@@ -166,24 +201,25 @@ namespace ServerCore
                     return;
                 }
 
+                if (!_recvBuffer.OnWrite(receivedSize))
+                {
+                    Disconnect();
+                    return;
+                }
+
                 while (true)
                 {
                     Packet packet;
                     ArraySegment<byte> readSegment = _recvBuffer.ReadSegment;
-                    EServerError error = PacketConverter.Deserialize(new ArraySegment<byte>(readSegment.Array, readSegment.Offset, readSegment.Count), out packet);
+                    int deserializedSize;
+                    EServerError error = PacketConverter.Deserialize(readSegment, out packet, out deserializedSize);
                     switch (error)
                     {
                         case EServerError.None:
                         {
-                            if (!_recvBuffer.OnWrite(receivedSize))
-                            {
-                                Disconnect();
-                                return;
-                            }
-
                             OnRecv(packet);
 
-                            if (!_recvBuffer.OnRead(receivedSize))
+                            if (!_recvBuffer.OnRead(deserializedSize))
                             {
                                 Disconnect();
                                 throw new Exception($"Recv Buffer Error");
@@ -194,26 +230,14 @@ namespace ServerCore
                         }
                         case EServerError.PacketFragmentation:
                         {
-                            if (!_recvBuffer.OnWrite(receivedSize))
-                            {
-                                Disconnect();
-                                return;
-                            }
-
                             RegisterRecv();
                             return;
                         }
                         case EServerError.UndefinedPacket:
                         default:
                         {
-                            if (!_recvBuffer.CancelWrite(receivedSize))
-                            {
-                                Disconnect();
-                                return;
-                            }
-
-                            RegisterRecv();
-                            throw new Exception($"Undefined ServerError {error.ToString()}");
+                            Disconnect();
+                            throw new Exception($"Undefined Packet ServerError {error.ToString()}");
                         }
                     }
                 }

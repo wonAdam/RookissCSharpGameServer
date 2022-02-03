@@ -13,7 +13,7 @@ namespace ServerCore.Packets
 
         public override ushort PacketSize
         {
-            get => (ushort)(sizeof(int) + sizeof(char) * msg.Length);
+            get => (ushort)(sizeof(int) + Encoding.UTF8.GetBytes(msg).Length);
         }
         public const ushort Id = 2;
         public string msg;
@@ -52,7 +52,7 @@ namespace ServerCore.Packets
         public override ushort PacketId { get => Id; }
         public override ushort PacketSize
         {
-            get => (ushort)(sizeof(int) + sizeof(char) * msg.Length);
+            get => (ushort)(sizeof(int) + Encoding.UTF8.GetBytes(msg).Length);
         }
         public const ushort Id = 3;
         public string msg;

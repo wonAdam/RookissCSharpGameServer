@@ -43,15 +43,6 @@ namespace ServerCore
             }
         }
 
-        public bool CancelWrite(int numOfBytes)
-        {
-            if (_writePos - numOfBytes < _readPos || _writePos - numOfBytes < 0)
-                return false; 
-
-            _writePos -= numOfBytes;
-            return true;
-        }
-
         public bool OnRead(int numOfBytes)
         {
             if (numOfBytes > DataSize)

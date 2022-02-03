@@ -83,9 +83,10 @@ namespace ServerCore
         /// </summary>
         /// <param name="packet">bytes packet with header</param>
         /// <returns></returns>
-        public static EServerError Deserialize(ArraySegment<byte> packetBuffer, out Packet packet)
+        public static EServerError Deserialize(ArraySegment<byte> packetBuffer, out Packet packet, out int deserializedSize)
         {
             packet = null;
+            deserializedSize = 0;
 
             // not enough size for parsing header
             if (packetBuffer.Count < PacketHeader.Size)
@@ -103,7 +104,7 @@ namespace ServerCore
 
             // TODO: packetId에 따라 Packet객체 생성후 Deserialize
             // 자동 생성 코드가 필요
-
+            deserializedSize = packetSize + readCursor;
             ArraySegment<byte> contentBuffer = packetBuffer.Slice(packetBuffer.Offset + readCursor, packetSize);
             switch (packetId)
             {
